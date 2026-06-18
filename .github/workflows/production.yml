@@ -76,9 +76,16 @@ jobs:
 
           jq --arg uri "${{ secrets.MONGODB_URI }}" '. + {MONGODB_URI: $uri}' env.json > env.tmp && mv env.tmp env.json
 
+          # Imagen ya subida al registro de Lightsail (no la URI de ECR privada).
+          IMAGE_REF=$(aws lightsail get-container-images \
+            --service-name container-agents-production \
+            --region us-east-1 \
+            --query 'containerImages[0].image' --output text)
+          echo "Lightsail image ref: $IMAGE_REF"
+
           echo '{
             "container-agents-production": {
-              "image": "'${{ env.IMAGE_URI }}'",
+              "image": "'"$IMAGE_REF"'",
               "ports": {
                 "8000": "HTTP"
               },

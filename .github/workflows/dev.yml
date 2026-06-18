@@ -78,9 +78,18 @@ jobs:
           # Inyectar secretos (no van en .env.dev)
           jq --arg uri "${{ secrets.MONGODB_URI }}" '. + {MONGODB_URI: $uri}' env.json > env.tmp && mv env.tmp env.json
 
+          # Imagen YA subida al registro de Lightsail (no la URI de ECR, que es
+          # privada y Lightsail no puede descargar). push-container-image la copió
+          # al registro de Lightsail; tomamos esa referencia (la más reciente).
+          IMAGE_REF=$(aws lightsail get-container-images \
+            --service-name container-services-agent-validator-auditor \
+            --region us-east-1 \
+            --query 'containerImages[0].image' --output text)
+          echo "Lightsail image ref: $IMAGE_REF"
+
           echo '{
             "container-services-agent-validator-auditor": {
-              "image": "'${{ env.IMAGE_URI }}'",
+              "image": "'"$IMAGE_REF"'",
               "ports": {
                 "8000": "HTTP"
               },
