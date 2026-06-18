@@ -1,0 +1,119 @@
+name: Build, Push Agent Service Image to AWS ECR and Update Lightsail (DEV)
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  build-push-update:
+    name: Build, Push to ECR, and Update Lightsail
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Install AWS CLI v2
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -o awscliv2.zip
+          sudo ./aws/install --update
+          aws --version
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and Push to ECR
+        id: build-push
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: services-agents-development
+          IMAGE_TAG: agents-developmentv001
+        run: |
+          IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+
+      - name: Install lightsailctl
+        run: |
+          curl "https://s3.us-west-2.amazonaws.com/lightsailctl/latest/linux-amd64/lightsailctl" -o "$HOME/lightsailctl"
+          chmod +x "$HOME/lightsailctl"
+          sudo mv "$HOME/lightsailctl" /usr/local/bin/lightsailctl
+
+      - name: Install jq
+        run: |
+          sudo apt-get install -y jq
+
+      - name: Push Container Image to Lightsail
+        run: |
+          aws lightsail push-container-image \
+            --region us-east-1 \
+            --service-name container-agents-development \
+            --label agents \
+            --image ${{ env.IMAGE_URI }}
+
+      - name: Create containers.json
+        run: |
+          # Cargar variables públicas desde .env.dev
+          echo -n "{" > env.json
+          while IFS='=' read -r key value; do
+              if [[ -n "$key" && "$key" != \#* ]]; then
+                  value=$(echo "$value" | sed 's/"/\\"/g')
+                  echo -n "\"$key\":\"$value\"," >> env.json
+              fi
+          done < .env.dev
+          sed -i '$ s/,$//' env.json
+          echo -n "}" >> env.json
+
+          # Inyectar secretos (no van en .env.dev)
+          jq --arg uri "${{ secrets.MONGODB_URI }}" '. + {MONGODB_URI: $uri}' env.json > env.tmp && mv env.tmp env.json
+
+          echo '{
+            "container-agents-development": {
+              "image": "'${{ env.IMAGE_URI }}'",
+              "ports": {
+                "8000": "HTTP"
+              },
+              "environment": '$(cat env.json)'
+            }
+          }' | jq . > containers.json
+
+      - name: Create public-endpoint.json
+        run: |
+          echo '{
+            "containerName": "container-agents-development",
+            "containerPort": 8000,
+            "healthCheck": {
+              "path": "/health",
+              "intervalSeconds": 10,
+              "timeoutSeconds": 5,
+              "healthyThreshold": 2,
+              "unhealthyThreshold": 2,
+              "successCodes": "200-399"
+            }
+          }' > public-endpoint.json
+
+      - name: Update Lightsail container service
+        run: |
+          aws lightsail create-container-service-deployment \
+            --service-name container-agents-development \
+            --containers file://containers.json \
+            --public-endpoint file://public-endpoint.json \
+            --debug
+
+      - name: Get Lightsail container logs
+        run: |
+          aws lightsail get-container-log \
+            --service-name container-agents-development \
+            --container-name container-agents-development \
+            --region us-east-1 || true

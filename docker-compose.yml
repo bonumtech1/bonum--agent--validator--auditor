@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agent-auditor
+    container_name: agent-auditor
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - '8000:8000'
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          memory: 200M
