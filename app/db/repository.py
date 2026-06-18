@@ -65,6 +65,25 @@ class AuditRepository:
             {"session_id": session_id}, {"_id": 0}
         )
 
+    async def list_session_audits(
+        self,
+        coach_id: str | None = None,
+        risk: str | None = None,
+        limit: int = 200,
+    ) -> list[dict]:
+        """Lista las auditorías de sesión (recientes primero), para el dashboard."""
+        query: dict = {}
+        if coach_id:
+            query["coach_id"] = coach_id
+        if risk:
+            query["risk"] = risk
+        cursor = (
+            self._db.session_audits.find(query, {"_id": 0})
+            .sort("created_at", -1)
+            .limit(limit)
+        )
+        return [doc async for doc in cursor]
+
     # ── Alertas ──────────────────────────────────────────────────
 
     async def save_alert(self, alert: Alert) -> None:

@@ -184,6 +184,18 @@ async def calendar_health_issues(repo: AuditRepository | None = Depends(get_repo
     return await repo.list_calendar_issues()
 
 
+@app.get("/session-audits")
+async def list_session_audits(
+    coachId: str | None = None,
+    risk: str | None = None,
+    repo: AuditRepository | None = Depends(get_repo),
+) -> list[dict]:
+    """Lista las auditorías de sesión (score + hallazgos) para el dashboard."""
+    if repo is None:
+        raise HTTPException(status_code=503, detail="Persistencia desactivada")
+    return await repo.list_session_audits(coach_id=coachId, risk=risk)
+
+
 @app.get("/sessions/{session_id}/audit")
 async def get_session_audit(
     session_id: str, repo: AuditRepository | None = Depends(get_repo)
