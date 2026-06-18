@@ -36,7 +36,7 @@ jobs:
         id: build-push
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: services-agents-development
+          ECR_REPOSITORY: container-services-agent-validator-auditor
           IMAGE_TAG: agents-developmentv001
         run: |
           IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
@@ -58,7 +58,7 @@ jobs:
         run: |
           aws lightsail push-container-image \
             --region us-east-1 \
-            --service-name container-agents-development \
+            --service-name container-services-agent-validator-auditor \
             --label agents \
             --image ${{ env.IMAGE_URI }}
 
@@ -79,7 +79,7 @@ jobs:
           jq --arg uri "${{ secrets.MONGODB_URI }}" '. + {MONGODB_URI: $uri}' env.json > env.tmp && mv env.tmp env.json
 
           echo '{
-            "container-agents-development": {
+            "container-services-agent-validator-auditor": {
               "image": "'${{ env.IMAGE_URI }}'",
               "ports": {
                 "8000": "HTTP"
@@ -91,7 +91,7 @@ jobs:
       - name: Create public-endpoint.json
         run: |
           echo '{
-            "containerName": "container-agents-development",
+            "containerName": "container-services-agent-validator-auditor",
             "containerPort": 8000,
             "healthCheck": {
               "path": "/health",
@@ -106,7 +106,7 @@ jobs:
       - name: Update Lightsail container service
         run: |
           aws lightsail create-container-service-deployment \
-            --service-name container-agents-development \
+            --service-name container-services-agent-validator-auditor \
             --containers file://containers.json \
             --public-endpoint file://public-endpoint.json \
             --debug
@@ -114,6 +114,6 @@ jobs:
       - name: Get Lightsail container logs
         run: |
           aws lightsail get-container-log \
-            --service-name container-agents-development \
-            --container-name container-agents-development \
+            --service-name container-services-agent-validator-auditor \
+            --container-name container-services-agent-validator-auditor \
             --region us-east-1 || true
