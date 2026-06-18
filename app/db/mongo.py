@@ -15,8 +15,12 @@ async def connect(cfg: Settings) -> AsyncMongoClient | None:
     """Crea el cliente y verifica la conexión con un ping. None si no hay URI."""
     if not cfg.mongodb_uri:
         return None
-    client: AsyncMongoClient = AsyncMongoClient(cfg.mongodb_uri)
-    await client.admin.command("ping")  # falla rápido si las credenciales/red están mal
+    # Timeout corto: si Atlas no responde (red/allowlist), falla en ~3s y el
+    # arranque continúa sin persistencia en vez de colgarse.
+    client: AsyncMongoClient = AsyncMongoClient(
+        cfg.mongodb_uri, serverSelectionTimeoutMS=3000, connectTimeoutMS=3000
+    )
+    await client.admin.command("ping")
     return client
 
 

@@ -9,6 +9,7 @@ Endpoints actuales (Fase 0 + 1 + 2):
 Pendiente (fases siguientes): alertas, auditor programado, dashboard, resumen LLM.
 """
 
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -33,11 +34,19 @@ from app.db.repository import AuditRepository
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = get_settings()
-    client = await mongo.connect(cfg)
+    # Mongo es opcional: el validador no lo necesita. Si no conecta, el servicio
+    # arranca igual con la persistencia desactivada (no tumbamos el arranque).
+    client = None
     repo: AuditRepository | None = None
-    if client is not None:
-        repo = AuditRepository(mongo.get_database(client, cfg))
-        await repo.ensure_indexes()
+    try:
+        client = await mongo.connect(cfg)
+        if client is not None:
+            repo = AuditRepository(mongo.get_database(client, cfg))
+            await repo.ensure_indexes()
+    except Exception as exc:
+        logging.getLogger("main").error("Mongo no disponible, persistencia OFF: %s", exc)
+        client = None
+        repo = None
     app.state.mongo_client = client
     app.state.audit_repo = repo
     app.state.last_audit_run = None
