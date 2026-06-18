@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from app.alerts import detector
@@ -65,6 +66,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Coaching Audit & Validation Agent", version="0.2.0", lifespan=lifespan
+)
+
+# CORS: el dashboard (navegador) consume estos endpoints desde otro origen.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # dev; en prod restringir al dominio del dashboard
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
