@@ -17,7 +17,7 @@ class UserClientBase(ABC):
 
     @abstractmethod
     async def get_coach_meta(self, coach_id: str) -> dict:
-        """Metadatos para el chequeo de salud: {found: bool, timezone: str | None}."""
+        """Metadatos de salud: {found, timezone, providers:[{provider,email,grant}]}."""
 
 
 class UserClient(UserClientBase):
@@ -47,14 +47,20 @@ class UserClient(UserClientBase):
                 f"{self._base_url}/profiles/coach/{coach_id}", headers=self._headers
             )
         if resp.status_code == 404:
-            return {"found": False, "timezone": None}
+            return {"found": False, "timezone": None, "providers": []}
         resp.raise_for_status()
         payload = resp.json()
-        try:
-            tz = payload["data"]["userId"]["timezone"]
-        except (KeyError, TypeError):
-            tz = None
-        return {"found": True, "timezone": tz or None}
+        user = (payload.get("data") or {}).get("userId") or {}
+        tz = user.get("timezone")
+        providers = [
+            {
+                "provider": p.get("provider"),
+                "email": p.get("email"),
+                "grant": p.get("accessToken"),
+            }
+            for p in (user.get("providers") or [])
+        ]
+        return {"found": True, "timezone": tz or None, "providers": providers}
 
 
 class StubUserClient(UserClientBase):
@@ -62,7 +68,7 @@ class StubUserClient(UserClientBase):
         return "UTC"
 
     async def get_coach_meta(self, coach_id: str) -> dict:
-        return {"found": True, "timezone": "UTC"}
+        return {"found": True, "timezone": "UTC", "providers": []}
 
 
 def build_user_client(cfg: Settings) -> UserClientBase:

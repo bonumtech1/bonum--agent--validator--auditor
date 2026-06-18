@@ -76,7 +76,7 @@ jobs:
           echo -n "}" >> env.json
 
           # Inyectar secretos (no van en .env.dev)
-          jq --arg uri "${{ secrets.MONGODB_URI }}" '. + {MONGODB_URI: $uri}' env.json > env.tmp && mv env.tmp env.json
+          jq --arg uri "${{ secrets.MONGODB_URI }}" --arg nylas "${{ secrets.NYLAS_API_KEY }}" '. + {MONGODB_URI: $uri, NYLAS_API_KEY: $nylas}' env.json > env.tmp && mv env.tmp env.json
 
           # Imagen YA subida al registro de Lightsail (no la URI de ECR, que es
           # privada y Lightsail no puede descargar). push-container-image la copió

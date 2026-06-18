@@ -74,7 +74,7 @@ jobs:
           sed -i '$ s/,$//' env.json
           echo -n "}" >> env.json
 
-          jq --arg uri "${{ secrets.MONGODB_URI }}" '. + {MONGODB_URI: $uri}' env.json > env.tmp && mv env.tmp env.json
+          jq --arg uri "${{ secrets.MONGODB_URI }}" --arg nylas "${{ secrets.NYLAS_API_KEY }}" '. + {MONGODB_URI: $uri, NYLAS_API_KEY: $nylas}' env.json > env.tmp && mv env.tmp env.json
 
           # Imagen ya subida al registro de Lightsail (no la URI de ECR privada).
           IMAGE_REF=$(aws lightsail get-container-images \

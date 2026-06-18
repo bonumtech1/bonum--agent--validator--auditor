@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     # Nexus API (coaching): de aquí sale el timezone del coach.
     nexus_api_url: str = "http://localhost:4003"
 
+    # Nylas: para verificar si la conexión de calendario del coach sigue viva.
+    # Si la API key está vacía, ese chequeo se omite (graceful).
+    nylas_api_key: str = ""
+    nylas_api_uri: str = "https://api.us.nylas.com/"
+
     # Header obligatorio en ambos servicios: "coaching" | "mentoring".
     app_id: str = "coaching"
 

@@ -10,6 +10,7 @@ from datetime import datetime
 from app.alerts import detector
 from app.auditor import calendar_health
 from app.clients.calendar import CalendarClientBase
+from app.clients.nylas import build_nylas_client
 from app.clients.sessions import SessionsClientBase
 from app.clients.users import UserClientBase
 from app.config import Settings
@@ -121,7 +122,12 @@ async def run_coach_health(
     now: datetime,
 ) -> CalendarHealthResult:
     result = await calendar_health.check_coach(
-        coach_id, calendar, users, now, days_ahead=cfg.calendar_health_days_ahead
+        coach_id,
+        calendar,
+        users,
+        now,
+        days_ahead=cfg.calendar_health_days_ahead,
+        nylas=build_nylas_client(cfg),
     )
     if repo is not None:
         await repo.save_calendar_health(result)

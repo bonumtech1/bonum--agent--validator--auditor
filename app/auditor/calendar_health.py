@@ -9,6 +9,9 @@ Hallazgos:
   • MISSING_TIMEZONE      (alto)  — sin timezone → la disponibilidad se calcula mal
   • NO_WORK_SCHEDULE      (alto)  — no trabaja ningún día → no se le puede agendar
   • MISCONFIGURED_SCHEDULE(medio) — día laborable con horas inválidas (init>=end, etc.)
+  • NO_CALENDAR_CONNECTED (alto)  — no tiene calendario conectado (sin providers)
+  • BROKEN_CALENDAR_CONNECTION (alto) — el grant de Nylas está caído/expirado
+                                    (requiere NYLAS_API_KEY; si no, se omite)
   • NOT_BOOKABLE          (alto)  — tiene días laborables pero 0 disponibilidad varios
                                     días seguidos (señal de calendario/timezone roto)
 """
@@ -65,6 +68,7 @@ async def check_coach(
     users: UserClientBase,
     now: datetime,
     days_ahead: int = 7,
+    nylas=None,
 ) -> CalendarHealthResult:
     meta = await users.get_coach_meta(coach_id)
     findings: list[Finding] = []
@@ -87,6 +91,30 @@ async def check_coach(
                 message="El coach no tiene timezone → su disponibilidad se calcula mal.",
             )
         )
+
+    # Conexión de calendario (Nylas).
+    providers = meta.get("providers") or []
+    if not providers:
+        findings.append(
+            Finding(
+                code="NO_CALENDAR_CONNECTED",
+                severity=Severity.HIGH,
+                message="El coach no tiene calendario conectado (sin providers).",
+            )
+        )
+    elif nylas is not None:
+        for p in providers:
+            status = await nylas.get_grant_status(p.get("grant"))
+            if status != "valid":
+                findings.append(
+                    Finding(
+                        code="BROKEN_CALENDAR_CONNECTION",
+                        severity=Severity.HIGH,
+                        message=f"Conexión {p.get('provider')} ({p.get('email')}) "
+                        f"con estado '{status}' → aparece libre aunque su calendario "
+                        "real no se puede leer.",
+                    )
+                )
 
     work_schedule = await calendar.get_work_schedule(coach_id)
     sched_findings = _schedule_findings(work_schedule)
