@@ -27,21 +27,28 @@ async def run_full_audit(app: FastAPI, cfg: Settings) -> dict:
     repo = app.state.audit_repo
     now = datetime.now(timezone.utc)
     logger.info("Auditoría programada: iniciando barrido de coaches")
-    summary = await runner.run_all_coaches(calendar, sessions, users, cfg, repo, now=now)
+
+    # Resiliente: si una parte falla, no perdemos la otra ni el resumen.
+    summary: dict = {"ran_at": now.isoformat()}
+    try:
+        summary.update(await runner.run_all_coaches(calendar, sessions, users, cfg, repo, now=now))
+    except Exception as exc:
+        logger.error("run_all_coaches falló: %s", exc)
+        summary["sessions_error"] = str(exc)
 
     if cfg.audit_calendar_health:
-        health = await runner.run_all_health(calendar, sessions, users, cfg, repo, now=now)
-        summary["calendar_health"] = {
-            "unhealthy": health["unhealthy"],
-            "coaches": health["coaches"],
-        }
+        try:
+            health = await runner.run_all_health(calendar, sessions, users, cfg, repo, now=now)
+            summary["calendar_health"] = {
+                "unhealthy": health["unhealthy"],
+                "coaches": health["coaches"],
+            }
+        except Exception as exc:
+            logger.error("run_all_health falló: %s", exc)
+            summary["calendar_health_error"] = str(exc)
 
     app.state.last_audit_run = summary
-    logger.info(
-        "Auditoría programada: %s coaches, %s sesiones (%s alto riesgo), %s con calendario roto",
-        summary["coaches"], summary["audited_sessions"], summary["high_risk_sessions"],
-        summary.get("calendar_health", {}).get("unhealthy", "n/a"),
-    )
+    logger.info("Auditoría programada terminada: %s", summary)
     return summary
 
 

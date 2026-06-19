@@ -106,12 +106,15 @@ class SessionsClient(SessionsClientBase):
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             page = 1
             while page <= max_pages:
-                resp = await client.get(
-                    f"{self._base_url}/session/GetAllSessions",
-                    params={"page": page, "pageSize": page_size},
-                    headers=self._headers,
-                )
-                resp.raise_for_status()
+                try:
+                    resp = await client.get(
+                        f"{self._base_url}/session/GetAllSessions",
+                        params={"page": page, "pageSize": page_size},
+                        headers=self._headers,
+                    )
+                    resp.raise_for_status()
+                except Exception:
+                    break  # ante un fallo de página, devolvemos lo recolectado
                 data = resp.json().get("data", {})
                 rows = data.get("result", {}).get("data", [])
                 if not rows:

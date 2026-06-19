@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     audit_calendar_health: bool = True
     calendar_health_days_ahead: int = 5
 
-    http_timeout_seconds: float = 5.0
+    http_timeout_seconds: float = 25.0
 
 
 @lru_cache
