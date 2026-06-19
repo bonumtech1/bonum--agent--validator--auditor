@@ -9,6 +9,7 @@ Endpoints actuales (Fase 0 + 1 + 2):
 Pendiente (fases siguientes): alertas, auditor programado, dashboard, resumen LLM.
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -51,6 +52,8 @@ async def lifespan(app: FastAPI):
     app.state.mongo_client = client
     app.state.audit_repo = repo
     app.state.last_audit_run = None
+    app.state.audit_running = False
+    app.state.audit_task = None
 
     scheduler = None
     if cfg.scheduler_enabled:
@@ -135,17 +138,39 @@ async def audit_coach(
     return runner.summarize(results)
 
 
+async def _run_audit_bg(app, cfg: Settings) -> None:
+    app.state.audit_running = True
+    try:
+        await run_full_audit(app, cfg)
+    except Exception as exc:  # no dejar el flag colgado si algo falla
+        logging.getLogger("main").error("Barrido falló: %s", exc)
+    finally:
+        app.state.audit_running = False
+
+
 @app.post("/audit/run-all")
 async def audit_run_all(request: Request, cfg: Settings = Depends(get_settings)) -> dict:
-    """Dispara manualmente el barrido completo (lo mismo que hace el job horario)."""
-    return await run_full_audit(request.app, cfg)
+    """Lanza el barrido en SEGUNDO PLANO y responde de inmediato.
+
+    El barrido completo (todos los coaches contra prod) tarda minutos; correrlo
+    síncrono haría que el proxy/navegador corten por timeout. Por eso se dispara
+    como tarea de fondo y el dashboard consulta /audit/last-run para el progreso.
+    """
+    app = request.app
+    if getattr(app.state, "audit_running", False):
+        return {"status": "already_running"}
+    # Guardamos la referencia para que la tarea no la recoja el GC.
+    app.state.audit_task = asyncio.create_task(_run_audit_bg(app, cfg))
+    return {"status": "started"}
 
 
 @app.get("/audit/last-run")
 def audit_last_run(request: Request) -> dict:
-    """Resumen del último barrido completo (programado o manual)."""
+    """Resumen del último barrido + si hay uno en curso (`running`)."""
     last = request.app.state.last_audit_run
-    return last or {"status": "sin barridos todavía"}
+    running = getattr(request.app.state, "audit_running", False)
+    base = last or {"status": "sin barridos todavía"}
+    return {**base, "running": running}
 
 
 @app.post("/audit/calendar-health/{coach_id}")
