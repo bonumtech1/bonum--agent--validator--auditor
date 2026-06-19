@@ -42,7 +42,7 @@ class Settings(BaseSettings):
 
     # Job programado (auditoría automática de todos los coaches)
     scheduler_enabled: bool = True
-    audit_interval_minutes: int = 60
+    audit_interval_minutes: int = 1440  # cada 24h (antes 60 = cada hora)
     audit_future_only: bool = True  # el job solo audita sesiones futuras
     audit_max_concurrency: int = 5  # coaches auditados en paralelo
 
