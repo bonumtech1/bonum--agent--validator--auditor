@@ -121,8 +121,14 @@ class SessionsClient(SessionsClientBase):
                     break
                 for raw in rows:
                     cid = _coach_id_of(raw)
-                    if cid:
-                        ids.add(cid)
+                    if not cid:
+                        continue
+                    # Solo coaches activos o limitados (se excluyen los 'blocked').
+                    coach = raw.get("coach")
+                    status = coach.get("status") if isinstance(coach, dict) else None
+                    if status is not None and status not in ("active", "limited"):
+                        continue
+                    ids.add(cid)
                 total = data.get("total", 0)  # conteo total está a nivel de `data`
                 if not isinstance(total, int) or page * page_size >= total:
                     break
