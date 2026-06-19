@@ -16,13 +16,18 @@ from app.core.models import Alert, AuditResult, CalendarHealthResult, SessionReq
 
 
 def _audit_document(
-    result: AuditResult, s: SessionRequest, now: datetime, coach_email: str | None = None
+    result: AuditResult,
+    s: SessionRequest,
+    now: datetime,
+    coach_email: str | None = None,
+    booked_at: datetime | None = None,
 ) -> dict:
     return {
         "session_id": result.session_id,
         "audit_type": "session",
         "coach_id": s.coach_id,
         "coach_email": coach_email,
+        "booked_at": booked_at,
         "client_id": s.client_id,
         "start_time": s.start_time,
         "end_time": s.end_time,
@@ -48,11 +53,15 @@ class AuditRepository:
         await self._db.calendar_health.create_index("healthy")
 
     async def save_session_audit(
-        self, result: AuditResult, s: SessionRequest, coach_email: str | None = None
+        self,
+        result: AuditResult,
+        s: SessionRequest,
+        coach_email: str | None = None,
+        booked_at: datetime | None = None,
     ) -> str:
         """Guarda (o reemplaza) la auditoría de una sesión. Devuelve el id."""
         now = datetime.now(timezone.utc)
-        doc = _audit_document(result, s, now, coach_email)
+        doc = _audit_document(result, s, now, coach_email, booked_at)
         if result.session_id:
             # Una auditoría vigente por sesión: upsert por session_id.
             await self._db.session_audits.replace_one(

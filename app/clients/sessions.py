@@ -27,10 +27,18 @@ class CoachSession:
     start: datetime
     end: datetime
     canceled: bool
+    booked_at: datetime | None = None  # cuándo se creó/agendó la sesión
 
 
 def _parse_dt(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _parse_dt_opt(value) -> datetime | None:
+    try:
+        return _parse_dt(value) if value else None
+    except (ValueError, AttributeError):
+        return None
 
 
 def _coach_id_of(raw: dict) -> str:
@@ -97,6 +105,7 @@ class SessionsClient(SessionsClientBase):
                     start=start,
                     end=start + timedelta(minutes=SESSION_MINUTES),
                     canceled=bool(raw.get("canceled")),
+                    booked_at=_parse_dt_opt(raw.get("createdAt")),
                 )
             )
         return sessions

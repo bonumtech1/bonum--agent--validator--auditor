@@ -66,7 +66,7 @@ async def run_coach_audit(
         )
         result = rules.audit(req, ctx, cfg, now)
         if repo is not None:
-            await repo.save_session_audit(result, req, coach_email)
+            await repo.save_session_audit(result, req, coach_email, s.booked_at)
             for alert in detector.detect(result, req, cfg, coach_email):
                 await repo.save_alert(alert)
         results.append(result)
