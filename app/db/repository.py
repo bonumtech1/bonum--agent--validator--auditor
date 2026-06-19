@@ -15,11 +15,14 @@ from pymongo.asynchronous.database import AsyncDatabase
 from app.core.models import Alert, AuditResult, CalendarHealthResult, SessionRequest
 
 
-def _audit_document(result: AuditResult, s: SessionRequest, now: datetime) -> dict:
+def _audit_document(
+    result: AuditResult, s: SessionRequest, now: datetime, coach_email: str | None = None
+) -> dict:
     return {
         "session_id": result.session_id,
         "audit_type": "session",
         "coach_id": s.coach_id,
+        "coach_email": coach_email,
         "client_id": s.client_id,
         "start_time": s.start_time,
         "end_time": s.end_time,
@@ -45,11 +48,11 @@ class AuditRepository:
         await self._db.calendar_health.create_index("healthy")
 
     async def save_session_audit(
-        self, result: AuditResult, s: SessionRequest
+        self, result: AuditResult, s: SessionRequest, coach_email: str | None = None
     ) -> str:
         """Guarda (o reemplaza) la auditoría de una sesión. Devuelve el id."""
         now = datetime.now(timezone.utc)
-        doc = _audit_document(result, s, now)
+        doc = _audit_document(result, s, now, coach_email)
         if result.session_id:
             # Una auditoría vigente por sesión: upsert por session_id.
             await self._db.session_audits.replace_one(
@@ -102,6 +105,7 @@ class AuditRepository:
                     "title": alert.title,
                     "description": alert.description,
                     "coach_id": alert.coach_id,
+                    "coach_email": alert.coach_email,
                     "session_id": alert.session_id,
                     "updated_at": now,
                 },
@@ -136,13 +140,16 @@ class AuditRepository:
 
     # ── Salud de calendario ──────────────────────────────────────
 
-    async def save_calendar_health(self, result: CalendarHealthResult) -> None:
+    async def save_calendar_health(
+        self, result: CalendarHealthResult, coach_email: str | None = None
+    ) -> None:
         now = datetime.now(timezone.utc)
         await self._db.calendar_health.replace_one(
             {"_id": result.coach_id},
             {
                 "_id": result.coach_id,
                 "coach_id": result.coach_id,
+                "coach_email": coach_email,
                 "healthy": result.healthy,
                 "findings": [f.model_dump() for f in result.findings],
                 "checked_at": now,

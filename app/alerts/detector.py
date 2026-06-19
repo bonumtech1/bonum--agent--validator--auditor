@@ -18,7 +18,9 @@ from app.core.models import (
 )
 
 
-def detect(result: AuditResult, s: SessionRequest, cfg: Settings) -> list[Alert]:
+def detect(
+    result: AuditResult, s: SessionRequest, cfg: Settings, coach_email: str | None = None
+) -> list[Alert]:
     alerts: list[Alert] = []
     sid = result.session_id or "sin-id"
 
@@ -84,10 +86,14 @@ def detect(result: AuditResult, s: SessionRequest, cfg: Settings) -> list[Alert]
             )
         )
 
+    for a in alerts:
+        a.coach_email = coach_email
     return alerts
 
 
-def detect_calendar_health(result: CalendarHealthResult) -> list[Alert]:
+def detect_calendar_health(
+    result: CalendarHealthResult, coach_email: str | None = None
+) -> list[Alert]:
     """Una alerta por cada hallazgo de salud de calendario (dedup por coach+código)."""
     alerts: list[Alert] = []
     for f in result.findings:
@@ -99,6 +105,7 @@ def detect_calendar_health(result: CalendarHealthResult) -> list[Alert]:
                 title="Problema de calendario",
                 description=f"Coach {result.coach_id}: {f.message}",
                 coach_id=result.coach_id,
+                coach_email=coach_email,
             )
         )
     return alerts

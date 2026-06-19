@@ -135,5 +135,6 @@ class Alert(BaseModel):
     title: str
     description: str
     coach_id: str | None = None
+    coach_email: str | None = None
     session_id: str | None = None
     status: AlertStatus = AlertStatus.NUEVA

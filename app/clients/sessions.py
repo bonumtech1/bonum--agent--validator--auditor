@@ -43,6 +43,11 @@ def _coachee_id_of(raw: dict) -> str:
     return c.get("_id", "") if isinstance(c, dict) else (c or "")
 
 
+def _coach_email_of(raw: dict) -> str:
+    c = raw.get("coach")
+    return c.get("email", "") if isinstance(c, dict) else ""
+
+
 class SessionsClientBase(ABC):
     @abstractmethod
     async def get_sessions(
@@ -55,8 +60,12 @@ class SessionsClientBase(ABC):
         """Todas las sesiones del coach, normalizadas (para auditar en lote)."""
 
     @abstractmethod
+    async def list_coaches(self) -> dict[str, str]:
+        """{coach_id: email} de coaches activos o limitados (excluye blocked)."""
+
     async def list_coach_ids(self) -> list[str]:
-        """IDs distintos de coaches con sesiones (para el job que audita a todos)."""
+        """IDs distintos de coaches (deriva de list_coaches)."""
+        return sorted((await self.list_coaches()).keys())
 
 
 class SessionsClient(SessionsClientBase):
@@ -101,8 +110,8 @@ class SessionsClient(SessionsClientBase):
             if not s.canceled
         ]
 
-    async def list_coach_ids(self, page_size: int = 500, max_pages: int = 100) -> list[str]:
-        ids: set[str] = set()
+    async def list_coaches(self, page_size: int = 500, max_pages: int = 100) -> dict[str, str]:
+        coaches: dict[str, str] = {}
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             page = 1
             while page <= max_pages:
@@ -128,12 +137,13 @@ class SessionsClient(SessionsClientBase):
                     status = coach.get("status") if isinstance(coach, dict) else None
                     if status is not None and status not in ("active", "limited"):
                         continue
-                    ids.add(cid)
+                    # Guarda el email (el primero que aparezca para ese coach).
+                    coaches.setdefault(cid, _coach_email_of(raw))
                 total = data.get("total", 0)  # conteo total está a nivel de `data`
                 if not isinstance(total, int) or page * page_size >= total:
                     break
                 page += 1
-        return sorted(ids)
+        return coaches
 
 
 class StubSessionsClient(SessionsClientBase):
@@ -145,8 +155,8 @@ class StubSessionsClient(SessionsClientBase):
     async def list_coach_sessions(self, coach_id: str) -> list[CoachSession]:
         return []
 
-    async def list_coach_ids(self) -> list[str]:
-        return []
+    async def list_coaches(self) -> dict[str, str]:
+        return {}
 
 
 def build_sessions_client(cfg: Settings) -> SessionsClientBase:

@@ -35,6 +35,7 @@ async def run_coach_audit(
     repo: AuditRepository | None,
     now: datetime,
     future_only: bool = False,
+    coach_email: str | None = None,
 ) -> list[AuditResult]:
     tz = await users.get_timezone(coach_id)
     work_schedule = await calendar.get_work_schedule(coach_id)
@@ -65,8 +66,8 @@ async def run_coach_audit(
         )
         result = rules.audit(req, ctx, cfg, now)
         if repo is not None:
-            await repo.save_session_audit(result, req)
-            for alert in detector.detect(result, req, cfg):
+            await repo.save_session_audit(result, req, coach_email)
+            for alert in detector.detect(result, req, cfg, coach_email):
                 await repo.save_alert(alert)
         results.append(result)
     return results
@@ -85,7 +86,7 @@ async def run_all_coaches(
     Lista los coaches y los audita en paralelo con concurrencia limitada.
     Devuelve un resumen agregado del barrido completo.
     """
-    coach_ids = await sessions.list_coach_ids()
+    coaches = await sessions.list_coaches()  # {coach_id: email}
     semaphore = asyncio.Semaphore(cfg.audit_max_concurrency)
 
     async def audit_one(coach_id: str) -> dict:
@@ -94,19 +95,20 @@ async def run_all_coaches(
                 results = await run_coach_audit(
                     coach_id, calendar, sessions, users, cfg, repo,
                     now=now, future_only=cfg.audit_future_only,
+                    coach_email=coaches.get(coach_id),
                 )
                 return {"coach_id": coach_id, "ok": True, **summarize(results)}
             except Exception as exc:  # un coach que falle no tumba el barrido
                 return {"coach_id": coach_id, "ok": False, "error": str(exc)}
 
-    per_coach = await asyncio.gather(*(audit_one(cid) for cid in coach_ids))
+    per_coach = await asyncio.gather(*(audit_one(cid) for cid in coaches))
 
     audited_sessions = sum(c.get("audited", 0) for c in per_coach if c["ok"])
     high = sum(c.get("by_risk", {}).get("high", 0) for c in per_coach if c["ok"])
     failed = [c["coach_id"] for c in per_coach if not c["ok"]]
     return {
         "ran_at": now.isoformat(),
-        "coaches": len(coach_ids),
+        "coaches": len(coaches),
         "coaches_failed": failed,
         "audited_sessions": audited_sessions,
         "high_risk_sessions": high,
@@ -120,6 +122,7 @@ async def run_coach_health(
     cfg: Settings,
     repo: AuditRepository | None,
     now: datetime,
+    coach_email: str | None = None,
 ) -> CalendarHealthResult:
     result = await calendar_health.check_coach(
         coach_id,
@@ -130,8 +133,8 @@ async def run_coach_health(
         nylas=build_nylas_client(cfg),
     )
     if repo is not None:
-        await repo.save_calendar_health(result)
-        for alert in detector.detect_calendar_health(result):
+        await repo.save_calendar_health(result, coach_email)
+        for alert in detector.detect_calendar_health(result, coach_email):
             await repo.save_alert(alert)
     return result
 
@@ -144,13 +147,16 @@ async def run_all_health(
     repo: AuditRepository | None,
     now: datetime,
 ) -> dict:
-    coach_ids = await sessions.list_coach_ids()
+    coaches = await sessions.list_coaches()  # {coach_id: email}
     semaphore = asyncio.Semaphore(cfg.audit_max_concurrency)
 
     async def check_one(coach_id: str) -> dict:
         async with semaphore:
             try:
-                r = await run_coach_health(coach_id, calendar, users, cfg, repo, now)
+                r = await run_coach_health(
+                    coach_id, calendar, users, cfg, repo, now,
+                    coach_email=coaches.get(coach_id),
+                )
                 return {
                     "coach_id": coach_id,
                     "ok": True,
@@ -160,11 +166,11 @@ async def run_all_health(
             except Exception as exc:
                 return {"coach_id": coach_id, "ok": False, "error": str(exc)}
 
-    per_coach = await asyncio.gather(*(check_one(cid) for cid in coach_ids))
+    per_coach = await asyncio.gather(*(check_one(cid) for cid in coaches))
     unhealthy = [c for c in per_coach if c["ok"] and not c["healthy"]]
     return {
         "ran_at": now.isoformat(),
-        "coaches": len(coach_ids),
+        "coaches": len(coaches),
         "unhealthy": len(unhealthy),
         "issues": unhealthy,
         "coaches_failed": [c["coach_id"] for c in per_coach if not c["ok"]],
